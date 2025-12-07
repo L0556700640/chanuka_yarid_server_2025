@@ -1,93 +1,117 @@
-const axios = require('axios');
+const axios = require("axios");
 
 class SheetsService {
   constructor() {
-    this.scriptUrl = "https://script.google.com/macros/s/AKfycbwRq8afGGhfJtRjr_m9B9LTAqpEL7-XsWLXR2Nkty74inJEDXRRl93vFCrbQc9DmwBW/exec"; 
-    
-    if (!this.scriptUrl) {
-      console.warn("Warning: GOOGLE_SCRIPT_URL is not set.");
-    }
+    this.spreadsheetId =
+      process.env.SPREADSHEET_ID ||
+      process.env.SHEET_ID ||
+      "1GO14iZ7Qck16S_hf_JRNfQLsIimJCA3lA2ZxDu3O9x0";
+    this.usersSheet = process.env.USERS_SHEET_NAME || "users";
+    this.roomsSheet = process.env.ROOMS_SHEET_NAME || "rooms";
+    this.scriptUrl =
+      process.env.APPS_SCRIPT_URL ||
+      process.env.GOOGLE_APPS_SCRIPT_URL ||
+      "https://script.google.com/macros/s/AKfycbwRq8afGGhfJtRjr_m9B9LTAqpEL7-XsWLXR2Nkty74inJEDXRRl93vFCrbQc9DmwBW/exec";
+    if (!this.scriptUrl)
+      console.warn("APPS_SCRIPT_URL not set - callScript will fail.");
   }
 
-  // פונקציית עזר לביצוע בקשות לסקריפט
-  async callScript(action, method = 'GET', data = null) {
-    if (!this.scriptUrl) throw new Error('GOOGLE_SCRIPT_URL is missing');
-
+  async callScript(action, method = "GET", body = null) {
+    if (!this.scriptUrl) throw new Error("APPS_SCRIPT_URL not configured");
     try {
       const config = {
-        method: method,
+        method,
         url: this.scriptUrl,
-        params: { action: action }, // הפעולה נשלחת כפרמטר ב-URL
-        headers: { 'Content-Type': 'application/json' }
+        params: { action },
+        headers: { "Content-Type": "application/json" },
       };
-
-      if (data && method === 'POST') {
-        config.data = data;
-        // axios שולח post רגיל, אבל Apps Script מצפה לעיתים לטיפול מיוחד.
-        // הקונפיגורציה הזו אמורה לעבוד עם ה-doPost שהגדרנו.
-      }
-
-      // Apps Script מחזיר לפעמים 302 Redirect, axios עוקב אחריו אוטומטית בדרך כלל.
-      const response = await axios(config);
-      return response.data;
-
+      if (body && method.toUpperCase() === "POST") config.data = body;
+      const res = await axios(config);
+      return res.data;
     } catch (err) {
-      console.error(`Failed to execute ${action}:`, err.message);
-      throw err;
+      const msg =
+        err.response && err.response.data
+          ? JSON.stringify(err.response.data)
+          : err.message;
+      throw new Error(`Apps Script call failed: ${msg}`);
     }
   }
 
-  // --- קריאות (Reads) ---
-
-  async getUserByChip(chipNum) {
-    // מקבלים את כל המערך מהסקריפט (כולל כותרות)
-    const rows = await this.callScript('getUsers');
-    
-    if (!rows || rows.length === 0) return null;
-    
-    const headers = rows[0];
-    const dataRows = rows.slice(1);
-    
-    // חיפוש לוגי בצד ה-Client (או שאפשר להעביר את הלוגיקה ל-Apps Script)
-    const userRow = dataRows.find(r => String(r[0]) === String(chipNum));
-    
-    if (!userRow) return null;
-    
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = userRow[i] || '');
-    return obj;
-  }
-
-  async getAllRooms() {
-    const rows = await this.callScript('getRooms');
-    if (!rows || rows.length === 0) return [];
-    
-    const headers = rows[0];
-    return rows.slice(1).map(r => {
+  // Read all users via Apps Script and map headers -> objects
+  async getAllUsersRaw() {
+    const data = await this.callScript("getUsers", "GET");
+    if (!Array.isArray(data) || data.length === 0) return [];
+    const headers = data[0].map((h) => String(h).trim());
+    return data.slice(1).map((row) => {
       const obj = {};
-      headers.forEach((h, i) => obj[h] = r[i] || '');
+      headers.forEach((h, i) => (obj[h] = row[i] !== undefined ? row[i] : ""));
       return obj;
     });
   }
 
-  // --- כתיבות (Writes) - עכשיו זה אפשרי! ---
+  async getUserByChip(chipNum) {
+    const users = await this.getAllUsersRaw();
+    if (!users || users.length === 0) return null;
+    const chipStr = String(chipNum);
+    const found = users.find((u) => {
+      // try several common header names
+      const candidates = [
+        "chip",
+        "chipNum",
+        "id",
+        "מספר ציפ",
+        "ציפ",
+        "chip_id",
+      ];
+      for (const c of candidates) {
+        if (u[c] !== undefined && String(u[c]) === chipStr) return true;
+      }
+      // fallback: check first column value if headers unknown
+      const firstKey = Object.keys(u)[0];
+      return firstKey && String(u[firstKey]) === chipStr;
+    });
+    return found || null;
+  }
 
-  async updateUserCharge(chipNum, newAmount) {
-    // שולחים בקשת POST לסקריפט
-    return await this.callScript('updateUserCharge', 'POST', {
-      chipNum: chipNum,
-      amount: newAmount
+  async getAllRooms() {
+    const data = await this.callScript("getRooms", "GET");
+    if (!Array.isArray(data) || data.length === 0) return [];
+    const headers = data[0].map((h) => String(h).trim());
+    return data.slice(1).map((row) => {
+      const obj = {};
+      headers.forEach((h, i) => (obj[h] = row[i] !== undefined ? row[i] : ""));
+      return obj;
     });
   }
 
-  // דוגמאות לפונקציות נוספות (צריך לממש את ה-Case המקביל ב-Apps Script)
-  async reduceUserBalance(chipNum, reduction) {
-     // תצטרך להוסיף 'reduceBalance' ב-doPost בתוך ה-Apps Script
-    return await this.callScript('reduceBalance', 'POST', { chipNum, reduction });
+  // Writes - forward password & params to Apps Script
+  async updateUserCharge(chipNum, amount, password) {
+    if (!password) throw new Error("Password required for charge");
+    return await this.callScript("updateUserCharge", "POST", {
+      chipNum,
+      amount,
+      password,
+    });
   }
 
-  async addUserPoints(chipNum, points) {
-    return await this.callScript('addPoints', 'POST', { chipNum, points });
+  async reduceUserBalance(chipNum, amount, password, room = "") {
+    if (!password) throw new Error("Password required for reduce");
+    return await this.callScript("reduceBalance", "POST", {
+      chipNum,
+      amount,
+      password,
+      roomNum: room,
+    });
+  }
+
+  async addUserPoints(chipNum, points, password, room = "") {
+    if (!password) throw new Error("Password required for addPoints");
+    return await this.callScript("addPoints", "POST", {
+      chipNum,
+      amount: points,
+      roomNum: room,
+      password,
+    });
   }
 }
 
