@@ -47,23 +47,14 @@ class UsersController {
       const { amount, room } = req.body;
 
       await this.sheetsService.reduceUserBalance(chipNum, amount, room);
+      
+      console.log(res);
+      
       res.json({ success: true, message: 'כסף הורד בהצלחה' });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  }
-
-  async addPoints(req, res) {
-    try {
-      const chipNum = req.params.id;
-      const { points, room } = req.body;
-
-      await this.sheetsService.addUserPoints(chipNum, points, room);
-      res.json({ success: true, message: 'נקודות נוספו בהצלחה' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   }
 }
 
-module.exports = UsersController;
+module.exports = UsersController

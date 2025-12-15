@@ -103,7 +103,14 @@ class SheetsService {
       roomNum: room,
     });
   }
-
+  async reduceUserPoints(chipNum, points, password, room = "") {
+    return await this.callScript("reducePoints", "POST", {
+      chipNum,
+      amount: points,
+      roomNum: room,
+      password,
+    });
+  }
   async addUserPoints(chipNum, points, password, room = "") {
     if (!password) throw new Error("Password required for addPoints");
     return await this.callScript("addPoints", "POST", {
