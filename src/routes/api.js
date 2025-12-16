@@ -134,6 +134,7 @@ router.post("/users/:chip/points", async (req, res) => {
 
     console.log("Points update response:", result);
     const user = await sheets.getUserByChip(chip);
+    console.log(user);
     const remainingPoints = parseFloat(
       user["סך נקודות שנצברו"] || user["points"] || user["נקודות"] || 0
     );
