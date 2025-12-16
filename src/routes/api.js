@@ -148,7 +148,7 @@ router.post("/users/:chip/points", async (req, res) => {
         `תוקף בהצלחה - נקודות נוכחיות ${remainingPoints} נקודות שנוצלו ${
           user["סך נקודות שנוצלו"] || 0
         }`,
-      remainingPoints,
+      remainingPoints:remainingPoints,
     });
   } catch (err) {
     console.error(err);
